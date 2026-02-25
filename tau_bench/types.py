@@ -1,6 +1,6 @@
 # Copyright Sierra
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any, Optional, Union
 
 RESPOND_ACTION_NAME = "respond"
@@ -88,3 +88,11 @@ class RunConfig(BaseModel):
     shuffle: int = 0
     user_strategy: str = "llm"
     few_shot_displays_path: Optional[str] = None
+
+    @field_validator("agent_strategy")
+    @classmethod
+    def validate_agent_strategy(cls, v: str) -> str:
+        valid = {"tool-calling", "act", "react", "few-shot", "multi-agent"}
+        if v not in valid:
+            raise ValueError(f"agent_strategy must be one of {valid}, got '{v}'")
+        return v

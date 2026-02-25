@@ -21,13 +21,14 @@ def run(config: RunConfig) -> List[EnvRunResult]:
     assert config.env in ["retail", "airline"], "Only retail and airline envs are supported"
     assert config.model_provider in provider_list, "Invalid model provider"
     assert config.user_model_provider in provider_list, "Invalid user model provider"
-    assert config.agent_strategy in ["tool-calling", "act", "react", "few-shot"], "Invalid agent strategy"
+    assert config.agent_strategy in ["tool-calling", "act", "react", "few-shot", "multi-agent"], "Invalid agent strategy"
     assert config.task_split in ["train", "test", "dev"], "Invalid task split"
     assert config.user_strategy in [item.value for item in UserStrategy], "Invalid user strategy"
 
     random.seed(config.seed)
     time_str = datetime.now().strftime("%m%d%H%M%S")
-    ckpt_path = f"{config.log_dir}/{config.agent_strategy}-{config.model.split('/')[-1]}-{config.temperature}_range_{config.start_index}-{config.end_index}_user-{config.user_model}-{config.user_strategy}_{time_str}.json"
+    model_name = config.model.split("/")[-1].replace(":", "-")
+    base_name = f"{model_name}_{config.env}_{config.agent_strategy}"
     if not os.path.exists(config.log_dir):
         os.makedirs(config.log_dir)
 
@@ -49,13 +50,10 @@ def run(config: RunConfig) -> List[EnvRunResult]:
     )
     results: List[EnvRunResult] = []
     lock = multiprocessing.Lock()
-    if config.task_ids and len(config.task_ids) > 0:
-        print(f"Running tasks {config.task_ids} (checkpoint path: {ckpt_path})")
-    else:
-        print(
-            f"Running tasks {config.start_index} to {end_index} (checkpoint path: {ckpt_path})"
-    )
+
     for i in range(config.num_trials):
+        ckpt_path = f"{config.log_dir}/{base_name}_run-{i+1}.json"
+
         if config.task_ids and len(config.task_ids) > 0:
             idxs = config.task_ids
         else:
@@ -115,17 +113,11 @@ def run(config: RunConfig) -> List[EnvRunResult]:
 
     display_metrics(results)
 
-    with open(ckpt_path, "w") as f:
-        json.dump([result.model_dump() for result in results], f, indent=2)
-        print(f"\n📄 Results saved to {ckpt_path}\n")
-    return results
-
 
 def agent_factory(
     tools_info: List[Dict[str, Any]], wiki, config: RunConfig
 ) -> Agent:
     if config.agent_strategy == "tool-calling":
-        # native tool calling
         from tau_bench.agents.tool_calling_agent import ToolCallingAgent
 
         return ToolCallingAgent(
@@ -136,7 +128,6 @@ def agent_factory(
             temperature=config.temperature,
         )
     elif config.agent_strategy == "act":
-        # `act` from https://arxiv.org/abs/2210.03629
         from tau_bench.agents.chat_react_agent import ChatReActAgent
 
         return ChatReActAgent(
@@ -148,7 +139,6 @@ def agent_factory(
             temperature=config.temperature,
         )
     elif config.agent_strategy == "react":
-        # `react` from https://arxiv.org/abs/2210.03629
         from tau_bench.agents.chat_react_agent import ChatReActAgent
 
         return ChatReActAgent(
@@ -173,6 +163,16 @@ def agent_factory(
             few_shot_displays=few_shot_displays,
             temperature=config.temperature,
         )
+    elif config.agent_strategy == "multi-agent":
+        from tau_bench.agents.multi_agent import MultiAgentSystem
+
+        return MultiAgentSystem(
+            tools_info=tools_info,
+            wiki=wiki,
+            model=config.model,
+            provider=config.model_provider,
+            temperature=config.temperature,
+        )
     else:
         raise ValueError(f"Unknown agent strategy: {config.agent_strategy}")
 
@@ -184,7 +184,6 @@ def display_metrics(results: List[EnvRunResult]) -> None:
     num_trials = len(set([r.trial for r in results]))
     rewards = [r.reward for r in results]
     avg_reward = sum(rewards) / len(rewards)
-    # c from https://arxiv.org/pdf/2406.12045
     c_per_task_id: dict[int, int] = {}
     for result in results:
         if result.task_id not in c_per_task_id:
