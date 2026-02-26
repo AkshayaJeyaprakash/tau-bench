@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=tau_qwen3_8b_multiagent
-#SBATCH --time=08:00:00
+#SBATCH --job-name=tau_qwen3_14b_multiagent
+#SBATCH --time=10:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:a100:3
 #SBATCH --partition=general
 #SBATCH --qos=public
-#SBATCH --output=logs/tau_qwen3_8b_multiagent_%j.out
-#SBATCH --error=logs/tau_qwen3_8b_multiagent_%j.err
+#SBATCH --output=logs/tau_qwen3_14b_multiagent_%j.out
+#SBATCH --error=logs/tau_qwen3_14b_multiagent_%j.err
 
 set -e
 
@@ -17,7 +17,7 @@ echo "=========================================="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $(hostname)"
 echo "Started: $(date)"
-echo "Model: Qwen3-8B Multi-Agent"
+echo "Model: Qwen3-14B Multi-Agent"
 echo "=========================================="
 
 nvidia-smi
@@ -29,7 +29,7 @@ HF_CACHE=$SCRATCH/hf_cache
 VLLM_ENV=$HOME/miniconda3/envs/vllm_env
 TAU_ENV=$HOME/miniconda3/envs/tau_bench
 
-AGENT_MODEL="Qwen/Qwen3-8B"
+AGENT_MODEL="Qwen/Qwen3-14B"
 USER_MODEL="meta-llama/Llama-3.1-8B-Instruct"
 
 AGENT_PORT_1=8000
@@ -71,7 +71,7 @@ CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
     --dtype bfloat16 \
     --gpu-memory-utilization 0.90 \
     --max-model-len 8192 \
-    --served-model-name Qwen3-8B \
+    --served-model-name Qwen3-14B \
     > $PROJECT/logs/vllm_agent1_${SLURM_JOB_ID}.log 2>&1 &
 AGENT_PID_1=$!
 
@@ -85,7 +85,7 @@ CUDA_VISIBLE_DEVICES=1 python -m vllm.entrypoints.openai.api_server \
     --dtype bfloat16 \
     --gpu-memory-utilization 0.90 \
     --max-model-len 8192 \
-    --served-model-name Qwen3-8B \
+    --served-model-name Qwen3-14B \
     > $PROJECT/logs/vllm_agent2_${SLURM_JOB_ID}.log 2>&1 &
 AGENT_PID_2=$!
 
@@ -143,7 +143,7 @@ export OPENAI_API_BASE="http://127.0.0.1:$AGENT_PORT_1/v1"
 python run.py \
     --agent-strategy multi-agent \
     --env retail \
-    --model openai/Qwen3-8B \
+    --model openai/Qwen3-14B \
     --model-provider openai \
     --user-model openai/Llama-3.1-8B-Instruct \
     --user-model-provider openai \
@@ -158,7 +158,7 @@ sleep 10
 python run.py \
     --agent-strategy multi-agent \
     --env airline \
-    --model openai/Qwen3-8B \
+    --model openai/Qwen3-14B \
     --model-provider openai \
     --user-model openai/Llama-3.1-8B-Instruct \
     --user-model-provider openai \
