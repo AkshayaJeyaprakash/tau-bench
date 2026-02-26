@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=tau_qwen3_14b_multiagent
-#SBATCH --time=10:00:00
+#SBATCH --time=05:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128GB
 #SBATCH --gres=gpu:a100:3
-#SBATCH --partition=general
-#SBATCH --qos=public
+#SBATCH --partition=public
+#SBATCH --qos=class
 #SBATCH --output=logs/tau_qwen3_14b_multiagent_%j.out
 #SBATCH --error=logs/tau_qwen3_14b_multiagent_%j.err
 
@@ -23,7 +23,7 @@ echo "=========================================="
 nvidia-smi
 
 # ─── Paths ───────────────────────────────────────────────
-SCRATCH=/scratch/<ASU-ID>
+SCRATCH=/scratch/akshayaj
 PROJECT=$SCRATCH/tau-bench-project
 HF_CACHE=$SCRATCH/hf_cache
 VLLM_ENV=$HOME/miniconda3/envs/vllm_env
@@ -40,16 +40,17 @@ mkdir -p $PROJECT/logs
 mkdir -p $HF_CACHE
 
 export HF_HOME=$HF_CACHE
+export HF_TOKEN=$(cat ~/.cache/huggingface/token)
+export HUGGINGFACE_TOKEN=$HF_TOKEN
 export HUGGINGFACE_HUB_CACHE=$HF_CACHE
 export OPENAI_API_KEY="dummy"
 
 # ─── Step 1: Download models ─────────────────────────────
 echo ""
 echo ">>> Step 1: Downloading models if not cached..."
-source $HOME/miniconda3/bin/activate
-conda activate vllm_env
+source $HOME/miniconda3/bin/activate vllm_env
 
-python -c "
+$HOME/miniconda3/envs/vllm_env/bin/python -c "
 from huggingface_hub import snapshot_download
 import os
 cache = os.environ['HF_HOME']
@@ -63,44 +64,17 @@ print('All downloads complete.')
 # ─── Step 2: Start vLLM agent instance 1 (GPU 0) ─────────
 echo ""
 echo ">>> Step 2: Starting agent vLLM instance 1 on port $AGENT_PORT_1 (GPU 0)..."
-CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
-    --model $AGENT_MODEL \
-    --host 127.0.0.1 \
-    --port $AGENT_PORT_1 \
-    --download-dir $HF_CACHE \
-    --dtype bfloat16 \
-    --gpu-memory-utilization 0.90 \
-    --max-model-len 8192 \
-    --served-model-name Qwen3-14B \
-    > $PROJECT/logs/vllm_agent1_${SLURM_JOB_ID}.log 2>&1 &
+CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server --model $AGENT_MODEL --host 127.0.0.1 --port $AGENT_PORT_1 --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Qwen3-14B > $PROJECT/logs/vllm_agent1_${SLURM_JOB_ID}.log 2>&1 &
 AGENT_PID_1=$!
 
 # ─── Step 3: Start vLLM agent instance 2 (GPU 1) ─────────
 echo ">>> Step 3: Starting agent vLLM instance 2 on port $AGENT_PORT_2 (GPU 1)..."
-CUDA_VISIBLE_DEVICES=1 python -m vllm.entrypoints.openai.api_server \
-    --model $AGENT_MODEL \
-    --host 127.0.0.1 \
-    --port $AGENT_PORT_2 \
-    --download-dir $HF_CACHE \
-    --dtype bfloat16 \
-    --gpu-memory-utilization 0.90 \
-    --max-model-len 8192 \
-    --served-model-name Qwen3-14B \
-    > $PROJECT/logs/vllm_agent2_${SLURM_JOB_ID}.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 python -m vllm.entrypoints.openai.api_server --model $AGENT_MODEL --host 127.0.0.1 --port $AGENT_PORT_2 --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Qwen3-14B > $PROJECT/logs/vllm_agent2_${SLURM_JOB_ID}.log 2>&1 &
 AGENT_PID_2=$!
 
 # ─── Step 4: Start vLLM user model (GPU 2) ───────────────
 echo ">>> Step 4: Starting user vLLM instance on port $USER_PORT (GPU 2)..."
-CUDA_VISIBLE_DEVICES=2 python -m vllm.entrypoints.openai.api_server \
-    --model $USER_MODEL \
-    --host 127.0.0.1 \
-    --port $USER_PORT \
-    --download-dir $HF_CACHE \
-    --dtype bfloat16 \
-    --gpu-memory-utilization 0.90 \
-    --max-model-len 8192 \
-    --served-model-name Llama-3.1-8B-Instruct \
-    > $PROJECT/logs/vllm_user_${SLURM_JOB_ID}.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 python -m vllm.entrypoints.openai.api_server --model $USER_MODEL --host 127.0.0.1 --port $USER_PORT --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Llama-3.1-8B-Instruct > $PROJECT/logs/vllm_user_${SLURM_JOB_ID}.log 2>&1 &
 USER_PID=$!
 
 # ─── Step 5: Wait for all 3 servers ──────────────────────
@@ -135,12 +109,13 @@ echo ">>> All 3 vLLM servers are ready!"
 # ─── Step 6: Run experiments ─────────────────────────────
 echo ""
 echo ">>> Step 6: Running experiments..."
-conda activate tau_bench
+source $HOME/miniconda3/bin/activate tau_bench
 cd $PROJECT/tau-bench
 
 export OPENAI_API_BASE="http://127.0.0.1:$AGENT_PORT_1/v1"
+export USER_API_BASE="http://127.0.0.1:$USER_PORT/v1"
 
-python run.py \
+$HOME/miniconda3/envs/tau_bench/bin/python run.py \
     --agent-strategy multi-agent \
     --env retail \
     --model openai/Qwen3-14B \
@@ -155,7 +130,7 @@ python run.py \
 
 sleep 10
 
-python run.py \
+$HOME/miniconda3/envs/tau_bench/bin/python run.py \
     --agent-strategy multi-agent \
     --env airline \
     --model openai/Qwen3-14B \

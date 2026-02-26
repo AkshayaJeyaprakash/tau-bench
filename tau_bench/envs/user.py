@@ -1,6 +1,7 @@
 # Copyright Sierra
 
 import abc
+import os
 import enum
 from litellm import completion
 
@@ -45,7 +46,7 @@ class LLMUserSimulationEnv(BaseUserSimulationEnv):
 
     def generate_next_message(self, messages: List[Dict[str, Any]]) -> str:
         res = completion(
-            model=self.model, custom_llm_provider=self.provider, messages=messages
+            model=self.model, custom_llm_provider=self.provider, messages=messages, api_base=os.environ.get("USER_API_BASE", os.environ.get("OPENAI_API_BASE")),
         )
         message = res.choices[0].message
         self.messages.append(message.model_dump())
@@ -116,7 +117,7 @@ User Response:
 
     def generate_next_message(self, messages: List[Dict[str, Any]]) -> str:
         res = completion(
-            model=self.model, custom_llm_provider=self.provider, messages=messages
+            model=self.model, custom_llm_provider=self.provider, messages=messages, api_base=os.environ.get("USER_API_BASE", os.environ.get("OPENAI_API_BASE"))
         )
         message = res.choices[0].message
         self.messages.append(message.model_dump())
@@ -165,7 +166,7 @@ class VerifyUserSimulationEnv(LLMUserSimulationEnv):
         cur_message = None
         while attempts < self.max_attempts:
             res = completion(
-                model=self.model, custom_llm_provider=self.provider, messages=messages
+                model=self.model, custom_llm_provider=self.provider, messages=messages, api_base=os.environ.get("USER_API_BASE", os.environ.get("OPENAI_API_BASE"))
             )
             cur_message = res.choices[0].message
             self.total_cost = res._hidden_params["response_cost"]

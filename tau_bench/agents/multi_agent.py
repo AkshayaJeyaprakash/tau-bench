@@ -300,6 +300,9 @@ Rules:
 - If a write operation is needed, next_action must be request_confirmation BEFORE tool_call
 - Never claim a booking is done unless the state ledger confirms it
 - If you are unsure of the user's intent, next_action = respond_to_user to ask clarification
+- If the user has ALREADY confirmed (said yes/ok/proceed/confirmed) in the last message, next_action must be tool_call immediately - do NOT ask for confirmation again
+- If read-only tools are needed (get_order_details, find_user_id, get_product_details, search flights), next_action = tool_call directly without confirmation
+- Only request_confirmation for irreversible write operations (exchange, cancel, book, return) and only ONCE
 """
 
 def run_orchestrator(model: str, provider: str, temperature: float,
@@ -315,7 +318,8 @@ def run_orchestrator(model: str, provider: str, temperature: float,
     content, _ = llm_call(model, provider, messages, temperature)
     try:
         # Strip markdown code fences if present
-        clean = re.sub(r"```(?:json)?|```", "", content).strip()
+        clean = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+        clean = re.sub(r"```(?:json)?|```", "", clean).strip()
         return json.loads(clean)
     except json.JSONDecodeError:
         # Fallback: treat as respond_to_user
@@ -367,7 +371,8 @@ def run_tool_navigator(model: str, provider: str, temperature: float,
     ]
     content, _ = llm_call(model, provider, messages, temperature)
     try:
-        clean = re.sub(r"```(?:json)?|```", "", content).strip()
+        clean = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+        clean = re.sub(r"```(?:json)?|```", "", clean).strip()
         return json.loads(clean)
     except json.JSONDecodeError:
         return {"tool_name": None, "arguments": {}, "needs_info": True,
@@ -421,7 +426,8 @@ def run_execution_tracker(model: str, provider: str, temperature: float,
     ]
     content, _ = llm_call(model, provider, messages, temperature)
     try:
-        clean = re.sub(r"```(?:json)?|```", "", content).strip()
+        clean = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+        clean = re.sub(r"```(?:json)?|```", "", clean).strip()
         return json.loads(clean)
     except json.JSONDecodeError:
         return {
