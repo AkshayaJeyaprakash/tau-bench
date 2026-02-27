@@ -17,19 +17,19 @@ echo "=========================================="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $(hostname)"
 echo "Started: $(date)"
-echo "Model: Qwen3-8B Multi-Agent"
+echo "Model: Qwen3-4B Multi-Agent"
 echo "=========================================="
 
 nvidia-smi
 
 # ─── Paths ───────────────────────────────────────────────
-SCRATCH=/scratch/npiduru1
+SCRATCH=/scratch/akshayaj
 PROJECT=$SCRATCH/tau-bench-project
 HF_CACHE=$SCRATCH/hf_cache
 VLLM_ENV=$HOME/miniconda3/envs/vllm_env
 TAU_ENV=$HOME/miniconda3/envs/tau_bench
 
-AGENT_MODEL="Qwen/Qwen3-8B"
+AGENT_MODEL="Qwen/Qwen3-4B"
 USER_MODEL="meta-llama/Llama-3.1-8B-Instruct"
 
 AGENT_PORT_1=8000
@@ -64,12 +64,12 @@ print('All downloads complete.')
 # ─── Step 2: Start vLLM agent instance 1 (GPU 0) ─────────
 echo ""
 echo ">>> Step 2: Starting agent vLLM instance 1 on port $AGENT_PORT_1 (GPU 0)..."
-CUDA_VISIBLE_DEVICES=0 $HOME/miniconda3/envs/vllm_env/bin/python -m vllm.entrypoints.openai.api_server --model $AGENT_MODEL --host 127.0.0.1 --port $AGENT_PORT_1 --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Qwen3-8B > $PROJECT/logs/vllm_agent1_${SLURM_JOB_ID}.log 2>&1 &
+CUDA_VISIBLE_DEVICES=0 $HOME/miniconda3/envs/vllm_env/bin/python -m vllm.entrypoints.openai.api_server --model $AGENT_MODEL --host 127.0.0.1 --port $AGENT_PORT_1 --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Qwen3-4B > $PROJECT/logs/vllm_agent1_${SLURM_JOB_ID}.log 2>&1 &
 AGENT_PID_1=$!
 
 # ─── Step 3: Start vLLM agent instance 2 (GPU 1) ─────────
 echo ">>> Step 3: Starting agent vLLM instance 2 on port $AGENT_PORT_2 (GPU 1)..."
-CUDA_VISIBLE_DEVICES=1 $HOME/miniconda3/envs/vllm_env/bin/python -m vllm.entrypoints.openai.api_server --model $AGENT_MODEL --host 127.0.0.1 --port $AGENT_PORT_2 --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Qwen3-8B > $PROJECT/logs/vllm_agent2_${SLURM_JOB_ID}.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 $HOME/miniconda3/envs/vllm_env/bin/python -m vllm.entrypoints.openai.api_server --model $AGENT_MODEL --host 127.0.0.1 --port $AGENT_PORT_2 --download-dir $HF_CACHE --dtype bfloat16 --gpu-memory-utilization 0.90 --max-model-len 8192 --served-model-name Qwen3-4B > $PROJECT/logs/vllm_agent2_${SLURM_JOB_ID}.log 2>&1 &
 AGENT_PID_2=$!
 
 # ─── Step 4: Start vLLM user model (GPU 2) ───────────────
@@ -118,7 +118,7 @@ export USER_API_BASE="http://127.0.0.1:$USER_PORT/v1"
 $HOME/miniconda3/envs/tau_bench/bin/python run.py \
     --agent-strategy multi-agent \
     --env retail \
-    --model openai/Qwen3-8B \
+    --model openai/Qwen3-4B \
     --model-provider openai \
     --user-model openai/Llama-3.1-8B-Instruct \
     --user-model-provider openai \
@@ -133,7 +133,7 @@ sleep 10
 $HOME/miniconda3/envs/tau_bench/bin/python run.py \
     --agent-strategy multi-agent \
     --env airline \
-    --model openai/Qwen3-8B \
+    --model openai/Qwen3-4B \
     --model-provider openai \
     --user-model openai/Llama-3.1-8B-Instruct \
     --user-model-provider openai \
